@@ -1,0 +1,12 @@
+import { useState } from 'react';
+import { Eye, EyeOff, LockKeyhole, Mail } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import AuthLayout from '../components/auth/AuthLayout';
+import { useAuth } from '../context/AuthContext';
+
+export default function Login() {
+  const [form,setForm]=useState({email:'',password:''}); const [show,setShow]=useState(false); const [remember,setRemember]=useState(true); const [busy,setBusy]=useState(false); const {login}=useAuth(); const navigate=useNavigate();
+  const submit=async(e)=>{e.preventDefault();setBusy(true);try{await login(form,remember);toast.success('Welcome back!');navigate('/')}catch(err){toast.error(err.response?.data?.message||'Unable to sign in')}finally{setBusy(false)}};
+  return <AuthLayout title="Welcome back" subtitle="Sign in and keep your preparation momentum alive."><form onSubmit={submit} className="space-y-5"><label className="block"><span className="mb-2 block text-xs font-bold">Email address</span><div className="relative"><Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input className="field pl-11" type="email" required placeholder="you@example.com" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></div></label><label className="block"><span className="mb-2 block text-xs font-bold">Password</span><div className="relative"><LockKeyhole className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input className="field px-11" type={show?'text':'password'} required placeholder="Enter your password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})}/><button type="button" onClick={()=>setShow(!show)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">{show?<EyeOff size={18}/>:<Eye size={18}/>}</button></div></label><label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-500"><input type="checkbox" checked={remember} onChange={e=>setRemember(e.target.checked)} className="h-4 w-4 rounded accent-primary-500"/> Remember me</label><button disabled={busy} className="primary-btn w-full">{busy?'Signing in…':'Sign in to Focus90'}</button><p className="text-center text-sm text-slate-500">New to Focus90? <Link className="font-bold text-primary-600" to="/signup">Create an account</Link></p></form></AuthLayout>;
+}
