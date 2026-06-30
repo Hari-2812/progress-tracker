@@ -7,6 +7,7 @@ import AppShell from './components/layout/AppShell';
 const Login = lazy(() => import('./pages/Login'));
 const Signup = lazy(() => import('./pages/Signup'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Checklist = lazy(() => import('./pages/Checklist'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Loading = () => <div className="grid min-h-screen place-items-center"><div className="h-10 w-10 animate-spin rounded-full border-4 border-primary-500/20 border-t-primary-500" /></div>;
 
@@ -22,6 +23,7 @@ export default function App() {
     <Route path="/signup" element={<Signup />} />
     <Route element={<Protected><AppShell /></Protected>}>
       <Route path="/" element={<Dashboard />} />
+      <Route path="/checklist" element={<Checklist />} />
       <Route path="/profile" element={<Profile />} />
     </Route>
     <Route path="*" element={<Navigate to="/" replace />} />

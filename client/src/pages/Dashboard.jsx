@@ -1,46 +1,163 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import Calendar from 'react-calendar';
-import { format, isAfter, isSameDay } from 'date-fns';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Award, BookOpenCheck, CalendarDays, Check, CheckCircle2, Circle, Flame, Loader2, Plus, Sparkles, Target, Trash2, TrendingUp, Trophy, X } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { format } from 'date-fns';
+import { Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
+
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 
-const badgeIcons={first_task:'🏅',streak_7:'🔥',streak_30:'⭐',streak_60:'🚀',champion_90:'👑',tasks_100:'🎯',questions_500:'📚'};
-const badgeNames={first_task:'First Task',streak_7:'7-Day Consistency',streak_30:'30-Day Warrior',streak_60:'60-Day Champion',champion_90:'90-Day Master',tasks_100:'100 Tasks',questions_500:'500 Questions'};
-const gradients=['from-orange-400 to-rose-500','from-emerald-400 to-teal-500','from-sky-400 to-indigo-500','from-violet-400 to-fuchsia-500'];
-const priorityStyle={low:'bg-slate-100 text-slate-500 dark:bg-white/10',medium:'bg-amber-100 text-amber-600 dark:bg-amber-500/10',high:'bg-rose-100 text-rose-600 dark:bg-rose-500/10'};
+// Import split modular components
+import SkeletonLoader from '../components/dashboard/SkeletonLoader';
+import StatCards from '../components/dashboard/StatCards';
+import TodayTasks from '../components/dashboard/TodayTasks';
+import CalendarSection from '../components/dashboard/CalendarSection';
+import ChartsSection from '../components/dashboard/ChartsSection';
+import AchievementsSection from '../components/dashboard/AchievementsSection';
+import TaskModal from '../components/dashboard/TaskModal';
+import ChecklistProgressWidget from '../components/dashboard/ChecklistProgressWidget';
+import GoalMilestoneWidget from '../components/dashboard/GoalMilestoneWidget';
 
-function StatCard({label,value,suffix,icon:Icon,index}){return <motion.div initial={{opacity:0,y:15}} animate={{opacity:1,y:0}} transition={{delay:index*.07}} className="card p-5"><div className="flex items-start justify-between"><div><p className="text-xs font-semibold text-slate-400">{label}</p><p className="mt-3 text-2xl font-extrabold tracking-tight">{value ?? '—'}<span className="ml-1 text-xs font-semibold text-slate-400">{suffix}</span></p></div><div className={`grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br ${gradients[index]} text-white shadow-lg`}><Icon size={20}/></div></div></motion.div>}
+export default function Dashboard() {
+  const { user } = useAuth();
+  const [data, setData] = useState(null);
+  const [selected, setSelected] = useState(() => new Date());
+  const [modal, setModal] = useState(false);
+  const [busyId, setBusyId] = useState(null);
 
-function TaskModal({open,onClose,onCreated}){
- const initial={name:'',description:'',startDate:format(new Date(),'yyyy-MM-dd'),targetEndDate:'',dailyTarget:'',priority:'medium'};const[form,setForm]=useState(initial);const[busy,setBusy]=useState(false);
- const submit=async(e)=>{e.preventDefault();setBusy(true);try{const{data}=await api.post('/tasks',form);onCreated(data);setForm(initial);onClose();toast.success('Task added to your study plan')}catch(error){toast.error(error.response?.data?.message||'Could not create task')}finally{setBusy(false)}};
- return <AnimatePresence>{open&&<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm" onMouseDown={e=>e.target===e.currentTarget&&onClose()}><motion.form initial={{opacity:0,scale:.96,y:16}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:.97}} onSubmit={submit} className="card max-h-[92vh] w-full max-w-xl overflow-y-auto bg-white p-6 dark:bg-[#171b30] md:p-7"><div className="mb-6 flex items-start justify-between"><div><h2 className="text-xl font-extrabold">Create a study task</h2><p className="mt-1 text-xs text-slate-400">This task repeats daily across its active date range.</p></div><button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 text-slate-500 dark:bg-white/5"><X size={18}/></button></div><div className="space-y-4"><label className="block text-xs font-bold">Task name<input autoFocus required maxLength={100} className="field mt-2" placeholder="e.g. Quantitative Aptitude Practice" value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></label><label className="block text-xs font-bold">Description <span className="font-normal text-slate-400">(optional)</span><textarea rows="3" maxLength={500} className="field mt-2 resize-none" placeholder="What will you focus on?" value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></label><div className="grid gap-4 sm:grid-cols-2"><label className="text-xs font-bold">Start date<input required type="date" className="field mt-2" value={form.startDate} onChange={e=>setForm({...form,startDate:e.target.value})}/></label><label className="text-xs font-bold">Target end date <span className="font-normal text-slate-400">(optional)</span><input type="date" min={form.startDate} className="field mt-2" value={form.targetEndDate} onChange={e=>setForm({...form,targetEndDate:e.target.value})}/></label></div><div className="grid gap-4 sm:grid-cols-2"><label className="text-xs font-bold">Daily target <span className="font-normal text-slate-400">(questions)</span><input type="number" min="0" max="10000" className="field mt-2" placeholder="e.g. 50" value={form.dailyTarget} onChange={e=>setForm({...form,dailyTarget:e.target.value})}/></label><label className="text-xs font-bold">Priority<select className="field mt-2" value={form.priority} onChange={e=>setForm({...form,priority:e.target.value})}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label></div></div><button disabled={busy} className="primary-btn mt-6 flex w-full items-center justify-center gap-2">{busy?<Loader2 size={18} className="animate-spin"/>:<Plus size={18}/>} Add to study plan</button></motion.form></motion.div>}</AnimatePresence>;
-}
+  // Core API call to load dashboard stats and data
+  const load = useCallback(() => {
+    api.get('/progress/dashboard')
+      .then((r) => setData(r.data))
+      .catch(() => toast.error('Could not load your progress data'));
+  }, []);
 
-function TodayTasks({day,onToggle,onArchive,onAdd,busyId}){return <section className="card p-6 md:p-7"><div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold">Today’s tasks</h2><p className="mt-1 text-xs text-slate-400">Complete every task to keep your streak alive.</p></div><button onClick={onAdd} className="flex items-center gap-2 rounded-xl bg-primary-50 px-4 py-2.5 text-xs font-bold text-primary-600 transition hover:bg-primary-100 dark:bg-primary-500/10"><Plus size={16}/> Add task</button></div>{day.tasks.length?<div className="space-y-3">{day.tasks.map(task=><motion.div layout key={task.id} className={`group flex items-center gap-3 rounded-2xl border p-4 transition ${task.completed?'border-emerald-200 bg-emerald-50/60 dark:bg-emerald-500/5':'hover:border-primary-200'}`}><button disabled={busyId===task.id} onClick={()=>onToggle(task)} aria-label={`Mark ${task.name} ${task.completed?'incomplete':'complete'}`} className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg transition ${task.completed?'bg-emerald-500 text-white':'border-2 text-transparent hover:border-primary-400'}`}>{busyId===task.id?<Loader2 size={15} className="animate-spin text-primary-500"/>:<Check size={16}/>}</button><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className={`truncate text-sm font-bold ${task.completed?'text-slate-400 line-through':''}`}>{task.name}</p><span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${priorityStyle[task.priority]}`}>{task.priority}</span></div>{(task.description||task.dailyTarget)&&<p className="mt-1 truncate text-[11px] text-slate-400">{task.description||`${task.dailyTarget} questions daily`}</p>}</div><button onClick={()=>onArchive(task)} className="grid h-8 w-8 place-items-center rounded-lg text-slate-300 opacity-0 transition hover:bg-red-50 hover:text-red-500 group-hover:opacity-100" aria-label={`Archive ${task.name}`}><Trash2 size={15}/></button></motion.div>)}</div>:<div className="grid min-h-52 place-items-center rounded-2xl border border-dashed text-center"><div><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-primary-50 text-primary-500 dark:bg-primary-500/10"><BookOpenCheck/></div><p className="mt-4 text-sm font-bold">Your study plan is waiting</p><p className="mt-1 text-xs text-slate-400">Add your first recurring task to begin.</p><button onClick={onAdd} className="mt-4 text-xs font-bold text-primary-600">Create first task →</button></div></div>}<div className="mt-5"><div className="mb-2 flex justify-between text-xs font-bold"><span>Today’s progress</span><span>{day.completed}/{day.total} tasks</span></div><div className="h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-white/5"><motion.div animate={{width:`${day.percentage}%`}} className={`h-full rounded-full ${day.percentage===100?'bg-emerald-500':'bg-gradient-to-r from-primary-500 to-violet-500'}`}/></div></div></section>}
+  useEffect(() => {
+    load();
+  }, [load]);
 
-export default function Dashboard(){
- const{user}=useAuth();const[data,setData]=useState(null);const[selected,setSelected]=useState(new Date());const[dayDetails,setDayDetails]=useState(null);const[modal,setModal]=useState(false);const[busyId,setBusyId]=useState(null);
- const load=useCallback(()=>api.get('/progress/dashboard').then(r=>setData(r.data)).catch(()=>toast.error('Could not load your progress')),[]);useEffect(()=>{load()},[load]);
- const selectedKey=format(selected,'yyyy-MM-dd');useEffect(()=>{if(!data)return;setDayDetails(null);api.get(`/tasks/day/${selectedKey}`).then(r=>setDayDetails(r.data)).catch(()=>toast.error('Could not load that day'))},[selectedKey,data?.stats.totalTasksCompleted,data?.today.total]);
- const statusMap=useMemo(()=>new Map((data?.dailyStatuses||[]).map(day=>[day.date,day.status])),[data]);
- const tileClass=({date,view})=>{if(view!=='month')return '';const status=statusMap.get(format(date,'yyyy-MM-dd'));return status&&status!=='none'?`calendar-status calendar-${status}`:''};
- const toggle=async(task)=>{setBusyId(task.id);try{const{data:next}=await api.patch(`/tasks/${task.id}/completion`,{date:format(new Date(),'yyyy-MM-dd'),completed:!task.completed});setData(next);toast.success(task.completed?'Task marked incomplete':next.today.status==='completed'?'All tasks done — streak secured!':'Task complete!')}catch(error){toast.error(error.response?.data?.message||'Could not update task')}finally{setBusyId(null)}};
- const archive=async(task)=>{if(!window.confirm(`Archive “${task.name}”? Its history will be preserved.`))return;try{const{data:next}=await api.delete(`/tasks/${task.id}`);setData(next);toast.success('Task archived')}catch(error){toast.error(error.response?.data?.message||'Could not archive task')}};
- if(!data)return <div className="grid min-h-[70vh] place-items-center"><Loader2 className="animate-spin text-primary-500"/></div>;
- const s=data.stats;const motivation=s.currentStreak>60?"You're on track to complete the challenge. Stay focused!":s.currentStreak>30?"Excellent consistency! You're building a winning habit.":'Keep going! Every day counts.';
- return <div className="mx-auto max-w-[1500px] space-y-7 p-5 md:p-8 lg:p-10">
-  <TaskModal open={modal} onClose={()=>setModal(false)} onCreated={setData}/>
-  <section className="flex flex-col justify-between gap-5 md:flex-row md:items-end"><div><div className="mb-2 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-600 dark:bg-emerald-500/10"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500"/> Your preparation is active</div><h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">Welcome back, {user?.name?.split(' ')[0]} 👋</h1><p className="mt-2 text-sm text-slate-500">{motivation}</p></div><button onClick={()=>setModal(true)} className="primary-btn flex items-center justify-center gap-2 text-sm"><Plus size={18}/> Create study task</button></section>
-  <section className="grid grid-cols-2 gap-4 xl:grid-cols-4"><StatCard label="Current streak" value={s.currentStreak} suffix="days" icon={Flame} index={0}/><StatCard label="Longest streak" value={s.longestStreak} suffix="days" icon={Trophy} index={1}/><StatCard label="Last completed" value={s.lastCompletedDate?format(new Date(`${s.lastCompletedDate}T00:00:00`),'MMM d'):'—'} suffix="" icon={CalendarDays} index={2}/><StatCard label="Consistency" value={s.consistencyPercentage} suffix="%" icon={TrendingUp} index={3}/></section>
-  <section className="grid gap-6 xl:grid-cols-[1.1fr_.9fr]"><TodayTasks day={data.today} onToggle={toggle} onArchive={archive} onAdd={()=>setModal(true)} busyId={busyId}/><div className="card p-6 md:p-7"><div className="mb-3 flex items-center justify-between"><div><p className="text-lg font-extrabold">Study calendar</p><p className="mt-1 text-xs text-slate-400">Select a date to inspect every task.</p></div><div className="flex gap-2 text-[9px] font-bold"><span className="text-emerald-500">● ALL</span><span className="text-amber-500">● SOME</span><span className="text-red-400">● NONE</span></div></div><Calendar value={selected} onChange={setSelected} tileClassName={tileClass} maxDate={new Date(new Date().setFullYear(new Date().getFullYear()+1))}/><div className="mt-3 rounded-2xl bg-slate-50 p-4 dark:bg-white/5"><div className="flex items-center justify-between"><div><p className="text-xs font-bold">{format(selected,'EEEE, MMMM d, yyyy')}</p><p className="text-[10px] text-slate-400">{dayDetails?`${dayDetails.completed}/${dayDetails.total} completed · ${dayDetails.percentage}%`:'Loading tasks…'}</p></div>{dayDetails&&<span className={`rounded-full px-3 py-1 text-[9px] font-bold uppercase status-${dayDetails.status}`}>{dayDetails.status==='none'?(isAfter(selected,new Date())?'Future':'No tasks'):dayDetails.status}</span>}</div>{dayDetails?.tasks.length>0&&<div className="mt-3 space-y-2 border-t pt-3">{dayDetails.tasks.map(task=><div key={task.id} className="flex items-center gap-2 text-xs">{task.completed?<CheckCircle2 size={15} className="text-emerald-500"/>:<Circle size={15} className="text-slate-300"/>}<span className={task.completed?'text-slate-400 line-through':''}>{task.name}</span></div>)}</div>}</div></div></section>
-  <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">{[[s.totalTasksCreated,'Tasks created'],[s.totalTasksCompleted,'Tasks completed'],[`${s.averageDailyCompletionRate}%`,'Avg. daily completion'],[s.totalQuestions,'Questions practiced']].map(([value,label])=><div key={label} className="card p-5"><p className="text-2xl font-extrabold">{value}</p><p className="mt-1 text-[11px] text-slate-400">{label}</p></div>)}</section>
-  <section className="grid gap-6 xl:grid-cols-[1.35fr_.65fr]"><div className="card p-6"><div className="mb-5"><p className="text-lg font-extrabold">Task completion trend</p><p className="text-xs text-slate-400">Completed versus scheduled tasks over 14 days</p></div><div className="h-64"><ResponsiveContainer><AreaChart data={data.analytics.trend}><CartesianGrid vertical={false} stroke="#94a3b822"/><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize:10,fill:'#94a3b8'}}/><YAxis allowDecimals={false} axisLine={false} tickLine={false} width={24} tick={{fontSize:10,fill:'#94a3b8'}}/><Tooltip contentStyle={{borderRadius:14,border:0}}/><Legend/><Area type="monotone" dataKey="total" name="Scheduled" stroke="#c4b5fd" fill="#c4b5fd22"/><Area type="monotone" dataKey="completed" name="Completed" stroke="#5667e9" strokeWidth={3} fill="#5667e933"/></AreaChart></ResponsiveContainer></div></div><div className="card flex flex-col bg-gradient-to-br from-[#5262e4] to-[#8b54df] p-7 text-white"><div className="flex items-center gap-2 text-xs font-bold text-white/70"><Sparkles size={16}/> SMART MOTIVATION</div><blockquote className="my-auto py-8 text-2xl font-bold leading-9">“{motivation}”</blockquote><div className="rounded-2xl bg-white/10 p-4"><p className="text-xs font-bold">Your 90-day goal</p><p className="mt-1 text-[10px] text-white/60">{s.successfulDays} successful days · {s.remainingDays} to go</p></div></div></section>
-  <section className="grid gap-6 md:grid-cols-3"><div className="card p-6"><p className="font-extrabold">Weekly consistency</p><p className="text-xs text-slate-400">Daily task completion %</p><div className="mt-4 h-44"><ResponsiveContainer><BarChart data={data.analytics.weekly}><XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize:10,fill:'#94a3b8'}}/><Tooltip contentStyle={{borderRadius:14,border:0}}/><Bar dataKey="percentage" fill="#5667e9" radius={[7,7,2,2]}/></BarChart></ResponsiveContainer></div></div><div className="card p-6"><p className="font-extrabold">Monthly progress</p><p className="text-xs text-slate-400">Average completion by week</p><div className="mt-4 h-44"><ResponsiveContainer><BarChart data={data.analytics.monthly}><XAxis dataKey="week" axisLine={false} tickLine={false} tick={{fontSize:10,fill:'#94a3b8'}}/><Tooltip contentStyle={{borderRadius:14,border:0}}/><Bar dataKey="percentage" fill="#8b5cf6" radius={[7,7,2,2]}/></BarChart></ResponsiveContainer></div></div><div className="card p-6"><p className="font-extrabold">Streak growth</p><p className="text-xs text-slate-400">Consecutive successful days</p><div className="mt-4 h-44"><ResponsiveContainer><AreaChart data={data.analytics.growth}><XAxis dataKey="date" axisLine={false} tickLine={false} minTickGap={24} tick={{fontSize:9,fill:'#94a3b8'}}/><Tooltip contentStyle={{borderRadius:14,border:0}}/><Area type="monotone" dataKey="streak" stroke="#f59e0b" strokeWidth={3} fill="#f59e0b22"/></AreaChart></ResponsiveContainer></div></div></section>
-  <section className="card p-6 md:p-7"><div className="mb-6 flex items-end justify-between"><div><p className="text-lg font-extrabold">Achievement path</p><p className="mt-1 text-xs text-slate-400">Milestones earned through real study work</p></div><Award className="text-amber-500"/></div><div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-7">{data.achievements.map(b=><motion.div whileHover={{y:-4}} key={b.type} className={`relative rounded-2xl border p-4 text-center ${b.earned?'border-amber-200 bg-gradient-to-b from-amber-50 to-white dark:from-amber-500/10 dark:to-transparent':'grayscale opacity-45'}`}><div className="text-3xl">{badgeIcons[b.type]}</div><p className="mt-3 text-[11px] font-extrabold">{badgeNames[b.type]}</p><p className="mt-1 text-[9px] text-slate-400">{b.earned?'Unlocked':`Goal: ${b.threshold}`}</p>{b.earned&&<span className="absolute right-2 top-2 grid h-5 w-5 place-items-center rounded-full bg-emerald-500 text-white"><Check size={12}/></span>}</motion.div>)}</div></section>
- </div>;
+  const toggle = useCallback(async (task) => {
+    setBusyId(task.id);
+    try {
+      const todayKey = format(new Date(), 'yyyy-MM-dd');
+      const { data: next } = await api.patch(`/tasks/${task.id}/completion`, {
+        date: todayKey,
+        completed: !task.completed
+      });
+      setData(next);
+      toast.success(
+        task.completed 
+          ? 'Task marked incomplete' 
+          : next.today.status === 'completed'
+            ? 'All tasks done — streak secured! 🎉'
+            : 'Task complete! Keep it up.'
+      );
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Could not update task status');
+    } finally {
+      setBusyId(null);
+    }
+  }, []);
+
+  const archive = useCallback(async (task) => {
+    if (!window.confirm(`Archive “${task.name}”? Its history will be preserved.`)) return;
+    try {
+      const { data: next } = await api.delete(`/tasks/${task.id}`);
+      setData(next);
+      toast.success('Task archived successfully');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Could not archive task');
+    }
+  }, []);
+
+  const handleCreated = useCallback((nextData) => {
+    setData(nextData);
+  }, []);
+
+  const handleOpenModal = useCallback(() => {
+    setModal(true);
+  }, []);
+
+  const handleCloseModal = useCallback(() => {
+    setModal(false);
+  }, []);
+
+  if (!data) {
+    return <SkeletonLoader />;
+  }
+
+  const s = data.stats;
+  const motivation = s.currentStreak > 60
+    ? "You're on track to complete the challenge. Stay focused!"
+    : s.currentStreak > 30
+      ? "Excellent consistency! You're building a winning habit."
+      : 'Keep going! Every day counts.';
+
+  return (
+    <div className="mx-auto max-w-[1500px] space-y-7 p-5 md:p-8 lg:p-10">
+      <TaskModal open={modal} onClose={handleCloseModal} onCreated={handleCreated} />
+      
+      <section className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
+        <div>
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-600 dark:bg-emerald-500/10">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+            Your preparation is active
+          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
+            Welcome back, {user?.name?.split(' ')[0]} 👋
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">{motivation}</p>
+        </div>
+        <button
+          onClick={handleOpenModal}
+          className="primary-btn flex items-center justify-center gap-2 text-sm"
+        >
+          <Plus size={18} /> Create study task
+        </button>
+      </section>
+
+      {/* Render modularized panels */}
+      <StatCards stats={s} />
+
+      {/* Checklist Progress and Goal Milestone Panels */}
+      <ChecklistProgressWidget />
+      
+      <GoalMilestoneWidget todayData={data.today} achievements={data.achievements} stats={s} />
+
+      <section className="grid gap-6 xl:grid-cols-[1.1fr_.9fr]">
+        <TodayTasks
+          day={data.today}
+          onToggle={toggle}
+          onArchive={archive}
+          onAdd={handleOpenModal}
+          busyId={busyId}
+        />
+        <CalendarSection
+          dailyStatuses={data.dailyStatuses}
+          totalTasksCompleted={s.totalTasksCompleted}
+          todayTotal={data.today.total}
+          selected={selected}
+          setSelected={setSelected}
+        />
+      </section>
+
+      {/* Additional Stats Panel */}
+      <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[
+          [s.totalTasksCreated, 'Tasks created'],
+          [s.totalTasksCompleted, 'Tasks completed'],
+          [`${s.averageDailyCompletionRate}%`, 'Avg. daily completion'],
+          [s.totalQuestions, 'Questions practiced']
+        ].map(([value, label]) => (
+          <div key={label} className="card p-5 hover:shadow-md transition-shadow duration-300">
+            <p className="text-2xl font-extrabold">{value}</p>
+            <p className="mt-1 text-[11px] text-slate-400 font-semibold">{label}</p>
+          </div>
+        ))}
+      </section>
+
+      <ChartsSection analytics={data.analytics} />
+
+      <AchievementsSection achievements={data.achievements} />
+    </div>
+  );
 }

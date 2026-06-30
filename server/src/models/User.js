@@ -10,7 +10,7 @@ const userSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 userSchema.pre('save', async function next() {
-  if (this.isModified('password')) this.password = await bcrypt.hash(this.password, 12);
+  if (this.isModified('password')) this.password = await bcrypt.hash(this.password, 10);
 });
 userSchema.methods.comparePassword = function (password) { return bcrypt.compare(password, this.password); };
 userSchema.methods.toSafeObject = function () { return { id: this._id, name: this.name, email: this.email, challengeStartDate: this.challengeStartDate, goalDays: this.goalDays }; };

@@ -1,12 +1,16 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { BarChart3, LayoutDashboard, LogOut, Moon, Sun, Target, UserRound } from 'lucide-react';
+import { BarChart3, LayoutDashboard, LogOut, Moon, Sun, Target, UserRound, BookOpenCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 
 export default function AppShell() {
   const { user, logout } = useAuth();
   const { dark, toggleTheme } = useTheme();
-  const links = [{ to: '/', label: 'Dashboard', icon: LayoutDashboard }, { to: '/profile', label: 'Profile', icon: UserRound }];
+  const links = [
+    { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { to: '/checklist', label: 'Checklist', icon: BookOpenCheck },
+    { to: '/profile', label: 'Profile', icon: UserRound }
+  ];
   return <div className="min-h-screen lg:flex">
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r bg-white/75 px-5 py-7 backdrop-blur-xl dark:bg-[#101426]/90 lg:flex">
       <div className="mb-10 flex items-center gap-3 px-2"><div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-primary-500 to-violet-600 text-white shadow-lg shadow-primary-500/25"><Target size={23} /></div><div><p className="font-extrabold tracking-tight">Focus<span className="text-primary-500">90</span></p><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-slate-400">Exam Sprint</p></div></div>
